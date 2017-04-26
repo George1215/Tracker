@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/marker_view"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@null">
+
+    <com.mikhaellopez.circularimageview.CircularImageView
+        android:id="@+id/marker_profile_photo"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="center_horizontal"
+        android:contentDescription="@null"
+        android:src="@drawable/default_avatar"
+        app:civ_border="true"
+        app:civ_border_color="#fff"
+        app:civ_border_width="1.5dp" />
+
+</FrameLayout>

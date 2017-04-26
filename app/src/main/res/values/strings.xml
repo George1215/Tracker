@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">Tracker</string>
+    <string name="text_signin">Login</string>
+    <string name="text_signup">Signup</string>
+    <string name="text_email">Email</string>
+    <string name="text_username">Username</string>
+    <string name="text_password">Password</string>
+    <string name="text_username_email">Username or Email</string>
+
+    <string name="permission_rationale_location">Access to the location service is required to demonstrate the \'my location\' feature, which shows your current location on the map.</string>
+    <string name="location_permission_denied">This app requires location permission to enable the \'my location\' layer. Please try again and grant access to use the location.\nIf the permission has been permanently denied, it can be enabled from the System Settings &gt; Apps &gt; \'Tracker\'.</string>
+    <string name="permission_required_toast">Location permission is required for this app.</string>
+    <string name="text_add_user">ADD USER</string>
+    <string name="text_loc_management">Location management for</string>
+    <string name="text_tracking">You aren\'t tracking anyone.</string>
+    <string name="text_no_one_tracking">No one is tracking you..</string>
+    <string name="text_track_user_info">Enter the name and Pin of the person you want to track. A notification will be send to the person you add, saying you will be tracking them.</string>
+    <string name="text_name">Name</string>
+    <string name="text_pin">Pin</string>
+    <string name="text_whos">Who\'s tracking you</string>
+</resources>
