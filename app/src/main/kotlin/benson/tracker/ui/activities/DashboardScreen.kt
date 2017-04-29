@@ -1,30 +1,19 @@
 package benson.tracker.ui.activities
 
 import android.Manifest
-import android.app.NotificationManager
-import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.PorterDuff
 import android.location.Location
 import android.os.Bundle
-import android.support.annotation.DrawableRes
+import android.os.Handler
 import android.support.v4.app.ActivityCompat
 import android.support.v4.content.ContextCompat
 import android.support.v7.app.AppCompatActivity
-import android.support.v7.app.NotificationCompat
 import android.util.Log
-import android.view.LayoutInflater
 import android.view.View
 import benson.tracker.R
-import benson.tracker.common.utils.PermissionUtils
-import benson.tracker.common.utils.Toast
-import benson.tracker.common.utils.isPermissionGranted
-import benson.tracker.common.utils.requestPermission
+import benson.tracker.common.utils.*
 import benson.tracker.domain.model.TrackedUser
 import benson.tracker.ui.adapters.TrackedUsersAdapter
 import com.google.android.gms.common.ConnectionResult
@@ -42,7 +31,6 @@ import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
-import com.mikhaellopez.circularimageview.CircularImageView
 import kotlinx.android.synthetic.main.screen_dashboard.*
 import java.util.*
 import kotlin.collections.ArrayList
@@ -60,7 +48,6 @@ class DashboardScreen : AppCompatActivity(),
 
     var KEY_REQUESTING_LOCATION_UPDATES = "requesting-location-updates"
     val KEY_LOCATION = "location"
-    val KEY_LAST_UPDATED_TIME_STRING = "last-updated-time-string"
 
     lateinit var apiClient: GoogleApiClient
     lateinit var locationRequest: LocationRequest
@@ -82,12 +69,39 @@ class DashboardScreen : AppCompatActivity(),
 
     var markers = HashMap<String, Marker>()
 
+    var disW = 0.0
+    var mmW = 0.0
+
+    // it's all about timing
+    var secsIdle = 0L
+    var idle = 0L
+    var idMt = 0L
+    var secsIdMt = 0L
+
+    var secsMovin = 0L
+    var movin = 0L
+    var mmMt = 0L
+    var secsMmt = 0L
+
+    var timer: Timer? = null
+    val handler: Handler = Handler()
+
+    lateinit var task: TimerTask
+
+    var isUserMoving: Boolean = false
+    var startedTimer: Boolean = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.screen_dashboard)
 
         auth = FirebaseAuth.getInstance()
-        authListener = FirebaseAuth.AuthStateListener { }
+        authListener = FirebaseAuth.AuthStateListener {
+            if (auth.currentUser == null) {
+                startActivity(Intent(this, HomeScreen::class.java))
+                finish()
+            }
+        }
 
         val supportMap: SupportMapFragment =
                 supportFragmentManager.findFragmentById(R.id.dashboard_map) as SupportMapFragment
@@ -108,13 +122,24 @@ class DashboardScreen : AppCompatActivity(),
         // Username
         databaseRef.child("username").orderByValue().equalTo(auth.currentUser?.email).addValueEventListener(object : ValueEventListener {
             override fun onCancelled(databaseError: DatabaseError?) {
-
             }
 
             override fun onDataChange(snapshot: DataSnapshot?) {
-                user_profile_username.text = "Name: ${snapshot?.value.toString().split("=")[0].split("{")[1]}"
-                actualUserName = snapshot?.value.toString().split("=")[0].split("{")[1]
-                setupTracker(actualUserName)
+                if (snapshot?.exists()!!) {
+                    val n = snapshot.value.toString().split("=")[0].split("{")[1]
+
+                    user_profile_username.text = "Name: $n"
+                    actualUserName = n
+
+                    if (actualUserName == "username") {
+                        signout()
+                    } else {
+                        dateOfTheDay()
+                        setupTracker(actualUserName)
+                    }
+                } else {
+
+                }
             }
         })
 
@@ -219,7 +244,7 @@ class DashboardScreen : AppCompatActivity(),
                                                                             MarkerOptions()
                                                                                     .title(username.username)
                                                                                     .position(LatLng(latitude as Double, longitude as Double))
-                                                                                    .icon(BitmapDescriptorFactory.fromBitmap(getMarkerBitmapFromView(R.drawable.default_avatar)))
+                                                                                    .icon(BitmapDescriptorFactory.fromBitmap(applicationContext.getMarkerBitmapFromView(R.drawable.default_avatar)))
                                                                     )
 
                                                             markers.put(username.username, mkr)
@@ -234,7 +259,7 @@ class DashboardScreen : AppCompatActivity(),
                         }
 
                         list_tracked_users.adapter = trackedUsersAdapter
-                        list_tracked_users.setOnItemClickListener { parent, view, position, id ->
+                        list_tracked_users.setOnItemClickListener { _, _, position, _ ->
                             startActivity(Intent(
                                     this@DashboardScreen,
                                     TrackedUserScreen::class.java).putExtra("tracked_user_name",
@@ -296,21 +321,108 @@ class DashboardScreen : AppCompatActivity(),
         })
     }
 
-    fun notifyNewUser(isNew: Boolean) {
-        if (isNew) {
-            val notificationCompat =
-                    NotificationCompat.Builder(this@DashboardScreen)
-                            .setSmallIcon(R.drawable.ic_fiber_new_black_24dp)
-                            .setContentTitle("Tracker")
-                            .setContentText("There's a new user tracking you!")
-                            .setAutoCancel(true)
+    fun dateOfTheDay() {
+        val databaseRef = FirebaseDatabase.getInstance().reference
 
+        val datetime: Calendar = Calendar.getInstance()
 
-            val notificationManager: NotificationManager =
-                    getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val yy: Int = datetime.get(Calendar.YEAR)
+        val mm: Int = datetime.get(Calendar.MONTH) + 1
+        val dd: Int = datetime.get(Calendar.DAY_OF_MONTH)
 
-            notificationManager.notify(0, notificationCompat.build())
-        }
+        var mDate: String = "%d-%d-%d".format(yy, mm, dd)
+
+        databaseRef.child("gps").child(actualUserName).child("date").addValueEventListener(object : ValueEventListener {
+            override fun onCancelled(de: DatabaseError?) {
+
+            }
+
+            override fun onDataChange(ds: DataSnapshot?) {
+                if (ds?.exists()!!) {
+                    val userDate = ds.value as String
+
+                    if (userDate.split("-")[1].toInt() != mm) {
+                        databaseRef.child("gps").child(actualUserName.plus("_mm")).child("distance_walked").setValue(null)
+                        databaseRef.child("gps").child(actualUserName.plus("_mm")).child("idle_time").setValue(null)
+                        databaseRef.child("gps").child(actualUserName.plus("_mm")).child("movin_time").setValue(null)
+                        databaseRef.child("gps").child(actualUserName.plus("_mm")).child("average_speed").setValue(null)
+
+                        databaseRef.child("gps").child(actualUserName).child("date").setValue(null)
+                        databaseRef.child("gps").child(actualUserName).child("distance_walked").setValue(null)
+                        databaseRef.child("gps").child(actualUserName).child("idle_time").setValue(null)
+                        databaseRef.child("gps").child(actualUserName).child("movin_time").setValue(null)
+                        databaseRef.child("gps").child(actualUserName).child("average_speed").setValue(null)
+
+                        databaseRef.child("gps").child(actualUserName.plus("_old")).child("date").setValue(null)
+                        databaseRef.child("gps").child(actualUserName.plus("_old")).child("distance_walked").setValue(null)
+                        databaseRef.child("gps").child(actualUserName.plus("_old")).child("idle_time").setValue(null)
+                        databaseRef.child("gps").child(actualUserName.plus("_old")).child("movin_time").setValue(null)
+                        databaseRef.child("gps").child(actualUserName.plus("_old")).child("average_speed").setValue(null)
+                    }
+
+                    if (userDate.split("-")[2].toInt() < dd && mDate.split("-")[1].toInt() == mm) {
+                        // date
+                        databaseRef.child("gps").child(actualUserName.plus("_old")).child("date").setValue(userDate)
+
+                        databaseRef.child("gps").child(actualUserName).child("distance_walked").addListenerForSingleValueEvent(object : ValueEventListener {
+                            override fun onCancelled(err: DatabaseError?) {
+
+                            }
+
+                            override fun onDataChange(ds: DataSnapshot?) {
+                                if (ds?.exists()!!) {
+                                    databaseRef.child("gps").child(actualUserName.plus("_old")).child("distance_walked").setValue(ds.value)
+                                    databaseRef.child("gps").child(actualUserName).child("distance_walked").setValue(null)
+                                }
+                            }
+                        })
+
+                        databaseRef.child("gps").child(actualUserName).child("idle_time").addListenerForSingleValueEvent(object : ValueEventListener {
+                            override fun onCancelled(err: DatabaseError?) {
+
+                            }
+
+                            override fun onDataChange(ds: DataSnapshot?) {
+                                if (ds?.exists()!!) {
+                                    databaseRef.child("gps").child(actualUserName.plus("_old")).child("idle_time").setValue(ds.value)
+                                    databaseRef.child("gps").child(actualUserName).child("idle_time").setValue(null)
+                                }
+                            }
+                        })
+
+                        databaseRef.child("gps").child(actualUserName).child("movin_time").addListenerForSingleValueEvent(object : ValueEventListener {
+                            override fun onCancelled(err: DatabaseError?) {
+
+                            }
+
+                            override fun onDataChange(ds: DataSnapshot?) {
+                                if (ds?.exists()!!) {
+                                    databaseRef.child("gps").child(actualUserName.plus("_old")).child("movin_time").setValue(ds.value)
+                                    databaseRef.child("gps").child(actualUserName).child("movin_time").setValue(null)
+                                }
+                            }
+                        })
+
+                        databaseRef.child("gps").child(actualUserName).child("average_speed").addListenerForSingleValueEvent(object : ValueEventListener {
+                            override fun onCancelled(err: DatabaseError?) {
+
+                            }
+
+                            override fun onDataChange(ds: DataSnapshot?) {
+                                if (ds?.exists()!!) {
+                                    databaseRef.child("gps").child(actualUserName.plus("_old")).child("average_speed").setValue(ds.value)
+                                    databaseRef.child("gps").child(actualUserName).child("average_speed").setValue(null)
+                                }
+                            }
+                        })
+                        databaseRef.child("gps").child(actualUserName).child("date").setValue(null)
+                    }
+                } else {
+                    databaseRef.child("gps").child(actualUserName).child("date").setValue(mDate)
+                }
+            }
+        })
+
     }
 
     fun updateWithBundle(savedInstanceState: Bundle?) {
@@ -374,6 +486,7 @@ class DashboardScreen : AppCompatActivity(),
                     requestingLocation = false
                 }
             }
+
             saveLoctData()
         }
     }
@@ -440,8 +553,104 @@ class DashboardScreen : AppCompatActivity(),
     }
 
     override fun onLocationChanged(location: Location?) {
-        actualLocation = location
-        saveLoctData()
+        if (actualLocation != null && location != null && actualUserName != "username") {
+
+            val timeDif: Int = (location.time.toInt() - actualLocation?.time!!.toInt()) / 1000
+            val distance: Double = actualLocation?.distanceTo(location)?.toDouble() ?: 0.0
+            val speed: Double = distance / timeDif
+
+            val databaseRef = FirebaseDatabase.getInstance().reference
+
+            isUserMoving = distance > 0.0
+
+            if (isUserMoving) {
+                databaseRef.child("gps").child(actualUserName).child("distance_walked").addValueEventListener(object : ValueEventListener {
+                    override fun onCancelled(err: DatabaseError?) {
+
+                    }
+
+                    override fun onDataChange(snap: DataSnapshot?) {
+                        if (snap?.exists()!!) {
+                            disW = snap.value as Double
+                        } else {
+                            val finalDir: Double = distance / 1000
+                            databaseRef.child("gps").child(actualUserName).child("distance_walked").setValue(finalDir)
+                        }
+                    }
+
+                })
+
+                databaseRef.child("gps").child(actualUserName.plus("_mm")).child("distance_walked").addValueEventListener(object : ValueEventListener {
+                    override fun onCancelled(p0: DatabaseError?) {
+
+                    }
+
+                    override fun onDataChange(p0: DataSnapshot?) {
+                        if (p0?.exists()!!) {
+                            mmW = p0.value as Double
+                        } else {
+                            val finalDir: Double = distance / 1000
+                            databaseRef.child("gps").child(actualUserName.plus("_mm")).child("distance_walked").setValue(finalDir)
+                        }
+                    }
+                })
+
+                if (disW != 0.0) {
+                    databaseRef.child("gps").child(actualUserName).child("distance_walked").setValue(distance / 1000 + disW)
+                    disW = 0.0
+                }
+
+                if (mmW != 0.0) {
+                    databaseRef.child("gps").child(actualUserName.plus("_mm")).child("distance_walked").setValue(distance / 1000 + mmW)
+                    mmW = 0.0
+                }
+
+                databaseRef.child("gps").child(actualUserName).child("average_speed").addValueEventListener(object : ValueEventListener {
+                    override fun onCancelled(err: DatabaseError?) {
+
+                    }
+
+                    override fun onDataChange(snap: DataSnapshot?) {
+                        if (snap?.exists()!!) {
+                            val mSpeed: Double = snap.value as Double
+
+                            if (speed > 0.0 && speed > mSpeed) {
+                                databaseRef.child("gps").child(actualUserName).child("average_speed").setValue(speed)
+                            }
+                        } else {
+                            if (speed > 0.0) {
+                                databaseRef.child("gps").child(actualUserName).child("average_speed").setValue(speed)
+                            }
+                        }
+                    }
+                })
+
+                databaseRef.child("gps").child(actualUserName.plus("_mm")).child("average_speed").addValueEventListener(object : ValueEventListener {
+                    override fun onCancelled(err: DatabaseError?) {
+
+                    }
+
+                    override fun onDataChange(snap: DataSnapshot?) {
+                        if (snap?.exists()!!) {
+                            val mSpeed: Double = snap.value as Double
+
+                            if (speed > 0.0 && speed > mSpeed) {
+                                databaseRef.child("gps").child(actualUserName.plus("_mm")).child("average_speed").setValue(speed)
+                            }
+                        } else {
+                            if (speed > 0.0) {
+                                databaseRef.child("gps").child(actualUserName.plus("_mm")).child("average_speed").setValue(speed)
+                            }
+                        }
+                    }
+                })
+            }
+
+            actualLocation = location
+            saveLoctData()
+        } else {
+            isUserMoving = false
+        }
     }
 
     override fun onMapReady(map: GoogleMap?) {
@@ -510,6 +719,8 @@ class DashboardScreen : AppCompatActivity(),
         if (apiClient.isConnected && requestingLocation == true) {
             startLocationUpdates()
         }
+
+        startTimer()
         saveLoctData()
     }
 
@@ -518,32 +729,143 @@ class DashboardScreen : AppCompatActivity(),
         auth.removeAuthStateListener(authListener)
 
         apiClient.disconnect()
+
+        stopTimer()
+        startedTimer = false
     }
 
     override fun onPause() {
         super.onPause()
         if (apiClient.isConnected)
             stopLocationUpdates()
+
+        stopTimer()
+        startedTimer = false
     }
 
-    private fun getMarkerBitmapFromView(@DrawableRes resId: Int): Bitmap {
-        val customMarkerView = (getSystemService(Context.LAYOUT_INFLATER_SERVICE) as LayoutInflater).inflate(R.layout.marker_header, null)
-        val markerImageView = customMarkerView.findViewById(R.id.marker_profile_photo) as CircularImageView
-        markerImageView.setImageResource(resId)
-        customMarkerView.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
-        customMarkerView.layout(0, 0, customMarkerView.measuredWidth, customMarkerView.measuredHeight)
-        customMarkerView.buildDrawingCache()
-        val returnedBitmap = Bitmap.createBitmap(customMarkerView.measuredWidth, customMarkerView.measuredHeight, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(returnedBitmap)
-        canvas.drawColor(Color.WHITE, PorterDuff.Mode.SRC_IN)
-        customMarkerView.background?.draw(canvas)
-        customMarkerView.draw(canvas)
-        return returnedBitmap
+    var hd = Handler()
+    var runnable: Runnable = Runnable {
+        if (isUserMoving) {
+            secsMovin++
+            secsMmt++
+            addMovinTimer(secsMovin, secsMmt)
+        } else {
+            secsIdle++
+            secsIdMt++
+            addIdleTimer(secsIdle, secsIdMt)
+        }
     }
 
-    @Synchronized fun randomColor(): Int =
-            0xff000000.toInt() + 256 * 256 *
-                    Random().nextInt(256) + 256 *
-                    Random().nextInt(256) + Random().nextInt(256)
+    fun startTimer() {
+        timer = Timer()
+        timer?.schedule(object : TimerTask() {
+            override fun run() {
+                hd.post(runnable)
+                startedTimer = true
+            }
+        }, 3000, 1000)
+    }
 
+
+    fun stopTimer() {
+        if (timer != null) {
+            hd.removeCallbacks(runnable)
+            timer?.cancel()
+            timer?.purge()
+            timer = null
+        }
+    }
+
+    fun signout() {
+        auth.signOut()
+        finish()
+        startActivity(Intent(this@DashboardScreen, HomeScreen::class.java))
+    }
+
+    fun addIdleTimer(v: Long, m: Long) {
+        val ref = FirebaseDatabase.getInstance().reference
+
+        if (actualUserName != "username") {
+            ref.child("gps").child(actualUserName).child("idle_time").addValueEventListener(object : ValueEventListener {
+                override fun onCancelled(derr: DatabaseError?) {
+
+                }
+
+                override fun onDataChange(snap: DataSnapshot?) {
+                    if (snap?.exists()!!) {
+                        idle = snap.value as Long
+                    } else {
+                        ref.child("gps").child(actualUserName).child("idle_time").setValue(v)
+                        Log.d("AA", "o.o")
+                    }
+                }
+            })
+
+            if (idle != 0L) {
+                ref.child("gps").child(actualUserName).child("idle_time").setValue(v + idle)
+                secsIdle = 0L
+            }
+
+            ref.child("gps").child(actualUserName.plus("_mm")).child("idle_time").addValueEventListener(object : ValueEventListener {
+                override fun onCancelled(derr: DatabaseError?) {
+
+                }
+
+                override fun onDataChange(snap: DataSnapshot?) {
+                    if (snap?.exists()!!) {
+                        idMt = snap.value as Long
+                    } else {
+                        ref.child("gps").child(actualUserName.plus("_mm")).child("idle_time").setValue(m)
+                    }
+                }
+            })
+
+            if (idMt != 0L) {
+                ref.child("gps").child(actualUserName.plus("_mm")).child("idle_time").setValue(m + idMt)
+                secsIdMt = 0L
+            }
+        }
+    }
+
+    fun addMovinTimer(v: Long, m: Long) {
+        val ref = FirebaseDatabase.getInstance().reference
+
+        ref.child("gps").child(actualUserName).child("movin_time").addValueEventListener(object : ValueEventListener {
+            override fun onCancelled(derr: DatabaseError?) {
+
+            }
+
+            override fun onDataChange(snap: DataSnapshot?) {
+                if (snap?.exists()!!) {
+                    movin = snap.value as Long
+                } else {
+                    ref.child("gps").child(actualUserName).child("movin_time").setValue(v)
+                }
+            }
+        })
+
+        if (movin != 0L) {
+            ref.child("gps").child(actualUserName).child("movin_time").setValue(v + movin)
+            secsMovin = 0L
+        }
+
+        ref.child("gps").child(actualUserName.plus("_mm")).child("movin_time").addValueEventListener(object : ValueEventListener {
+            override fun onCancelled(derr: DatabaseError?) {
+
+            }
+
+            override fun onDataChange(snap: DataSnapshot?) {
+                if (snap?.exists()!!) {
+                    mmMt = snap.value as Long
+                } else {
+                    ref.child("gps").child(actualUserName.plus("_mm")).child("movin_time").setValue(m)
+                }
+            }
+        })
+
+        if (mmMt != 0L) {
+            ref.child("gps").child(actualUserName.plus("_mm")).child("movin_time").setValue(m + mmMt)
+            secsMmt = 0L
+        }
+    }
 }
