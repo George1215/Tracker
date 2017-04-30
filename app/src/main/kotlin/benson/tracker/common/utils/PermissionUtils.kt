@@ -35,12 +35,10 @@ fun requestPermission(activity: AppCompatActivity, requestId: Int,
  */
 fun isPermissionGranted(grantPermissions: Array<String>, grantResults: IntArray,
                         permission: String): Boolean {
-    for (i in grantPermissions.indices) {
-        if (permission == grantPermissions[i]) {
-            return grantResults[i] == PackageManager.PERMISSION_GRANTED
-        }
-    }
-    return false
+    return grantPermissions.indices
+            .firstOrNull { permission == grantPermissions[it] }
+            ?.let { grantResults[it] == PackageManager.PERMISSION_GRANTED }
+            ?: false
 }
 
 class PermissionUtils {
@@ -51,7 +49,7 @@ class PermissionUtils {
 
         private var mFinishActivity = false
 
-        override fun onCreateDialog(savedInstanceState: Bundle): Dialog {
+        override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
             mFinishActivity = arguments.getBoolean(ARGUMENT_FINISH_ACTIVITY)
 
             return AlertDialog.Builder(activity)
@@ -101,7 +99,7 @@ class PermissionUtils {
 
         private var mFinishActivity = false
 
-        override fun onCreateDialog(savedInstanceState: Bundle): Dialog {
+        override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
             val arguments = arguments
             val requestCode = arguments.getInt(ARGUMENT_PERMISSION_REQUEST_CODE)
             mFinishActivity = arguments.getBoolean(ARGUMENT_FINISH_ACTIVITY)

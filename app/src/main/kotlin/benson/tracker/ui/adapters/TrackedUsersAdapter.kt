@@ -62,7 +62,7 @@ class TrackedUsersAdapter(
                             "${trackedUser.username} was removed from your tracking list!".Toast(ctx)
 
                             databaseRef.child("tracking").child(name).child(trackedUser.username).removeValue()
-                            databaseRef.child("trackedBy").child(name).child(trackedUser.username).removeValue()
+                            databaseRef.child("trackedBy").child(trackedUser.username).child(name).removeValue()
 
                             this@TrackedUsersAdapter.notifyDataSetChanged()
                             this@TrackedUsersAdapter.remove(trackedUser)
@@ -72,7 +72,7 @@ class TrackedUsersAdapter(
                             "${trackedUser.username} was removed and cannot track you anymore!".Toast(ctx)
 
                             databaseRef.child("trackedBy").child(name).child(trackedUser.username).removeValue()
-                            databaseRef.child("tracking").child(name).child(trackedUser.username).removeValue()
+                            databaseRef.child("tracking").child(trackedUser.username).child(name).removeValue()
 
                             this@TrackedUsersAdapter.notifyDataSetChanged()
                             this@TrackedUsersAdapter.remove(trackedUser)

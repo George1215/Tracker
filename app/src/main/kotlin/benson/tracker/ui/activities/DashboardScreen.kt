@@ -13,7 +13,10 @@ import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.view.View
 import benson.tracker.R
-import benson.tracker.common.utils.*
+import benson.tracker.common.utils.PermissionUtils
+import benson.tracker.common.utils.Toast
+import benson.tracker.common.utils.getMarkerBitmapFromView
+import benson.tracker.common.utils.requestPermission
 import benson.tracker.domain.model.TrackedUser
 import benson.tracker.ui.adapters.TrackedUsersAdapter
 import com.google.android.gms.common.ConnectionResult
@@ -458,36 +461,41 @@ class DashboardScreen : AppCompatActivity(),
     }
 
     fun startLocationUpdates() {
-        LocationServices.SettingsApi.checkLocationSettings(
-                apiClient,
-                locationSettings
-        ).setResultCallback { locationSettingsResult ->
-            val status = locationSettingsResult.status
-            when (status.statusCode) {
-                LocationSettingsStatusCodes.SUCCESS -> {
-                    Log.i("LOCATION", "All location settings are satisfied.")
-                    LocationServices.FusedLocationApi.requestLocationUpdates(
-                            apiClient, locationRequest, this@DashboardScreen)
-                }
-                LocationSettingsStatusCodes.RESOLUTION_REQUIRED -> {
-                    Log.i("LOCATION", "Location settings are not satisfied. Attempting to upgrade " + "location settings ")
-                    try {
-                        // Show the dialog by calling startResolutionForResult(), and check the
-                        // result in onActivityResult().
-                        status.startResolutionForResult(this@DashboardScreen, 0x1)
-                    } catch (e: IntentSender.SendIntentException) {
-                        Log.i("LOCATION", "PendingIntent unable to execute request.")
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requestPermission(this, LOCATION_PERMISSION_REQUEST_CODE,
+                    Manifest.permission.ACCESS_FINE_LOCATION, true)
+        } else {
+            LocationServices.SettingsApi.checkLocationSettings(
+                    apiClient,
+                    locationSettings
+            ).setResultCallback { locationSettingsResult ->
+                val status = locationSettingsResult.status
+                when (status.statusCode) {
+                    LocationSettingsStatusCodes.SUCCESS -> {
+                        Log.i("LOCATION", "All location settings are satisfied.")
+                        LocationServices.FusedLocationApi.requestLocationUpdates(
+                                apiClient, locationRequest, this@DashboardScreen)
+                    }
+                    LocationSettingsStatusCodes.RESOLUTION_REQUIRED -> {
+                        Log.i("LOCATION", "Location settings are not satisfied. Attempting to upgrade " + "location settings ")
+                        try {
+                            // Show the dialog by calling startResolutionForResult(), and check the
+                            // result in onActivityResult().
+                            status.startResolutionForResult(this@DashboardScreen, 0x1)
+                        } catch (e: IntentSender.SendIntentException) {
+                            Log.i("LOCATION", "PendingIntent unable to execute request.")
+                        }
+                    }
+                    LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE -> {
+                        val errorMessage = "Location settings are inadequate, and cannot be " + "fixed here. Fix in Settings."
+                        Log.e("LOCATION", errorMessage)
+                        errorMessage.Toast(this@DashboardScreen)
+                        requestingLocation = false
                     }
                 }
-                LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE -> {
-                    val errorMessage = "Location settings are inadequate, and cannot be " + "fixed here. Fix in Settings."
-                    Log.e("LOCATION", errorMessage)
-                    errorMessage.Toast(this@DashboardScreen)
-                    requestingLocation = false
-                }
-            }
 
-            saveLoctData()
+                saveLoctData()
+            }
         }
     }
 
@@ -664,15 +672,9 @@ class DashboardScreen : AppCompatActivity(),
     }
 
     fun addMyLocation() {
-        if (ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            requestPermission(
-                    this,
-                    LOCATION_PERMISSION_REQUEST_CODE,
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    true
-            )
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requestPermission(this, LOCATION_PERMISSION_REQUEST_CODE,
+                    Manifest.permission.ACCESS_FINE_LOCATION, true)
         } else {
             gMap.isMyLocationEnabled = true
         }
@@ -682,18 +684,21 @@ class DashboardScreen : AppCompatActivity(),
         return false
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>,
-                                            grantResults: IntArray) {
-        if (requestCode != LOCATION_PERMISSION_REQUEST_CODE)
-            return
-
-        if (isPermissionGranted(permissions, grantResults,
-                Manifest.permission.ACCESS_FINE_LOCATION))
-            addMyLocation()
-        else
-            permissionDenied = true
-
+    override fun onRequestPermissionsResult(requestCode: Int,
+                                            permissions: Array<String>, grantResults: IntArray) {
+        when (requestCode) {
+            LOCATION_PERMISSION_REQUEST_CODE -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    // permission was granted
+                    addMyLocation()
+                } else {
+                    permissionDenied = true
+                }
+                return
+            }
+        }
     }
+
 
     override fun onResumeFragments() {
         super.onResumeFragments()
