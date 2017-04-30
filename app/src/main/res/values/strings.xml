@@ -18,4 +18,12 @@
     <string name="text_name">Name</string>
     <string name="text_pin">Pin</string>
     <string name="text_whos">Who\'s tracking you</string>
+    <string name="text_logout">Logout</string>
+    <string name="text_no_data">There\'s no data available for this user. Maybe he has not used the app yet!</string>
+
+    <string-array name="aa">
+        <item>buceta</item>
+        <item>cu</item>
+        <item>buceta</item>
+    </string-array>
 </resources>

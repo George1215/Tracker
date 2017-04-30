@@ -47,5 +47,6 @@
         <activity android:name=".ui.activities.DashboardScreen" />
         <activity android:name=".ui.activities.TrackUserScreen" />
         <activity android:name=".ui.activities.TrackedUserScreen" />
+        <activity android:name=".ui.activities.TrackedUserFullView" />
     </application>
 </manifest>
