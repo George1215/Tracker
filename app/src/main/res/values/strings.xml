@@ -13,17 +13,11 @@
     <string name="text_add_user">ADD USER</string>
     <string name="text_loc_management">Location management for</string>
     <string name="text_tracking">You aren\'t tracking anyone.</string>
-    <string name="text_no_one_tracking">No one is tracking you..</string>
+    <string name="text_no_one_tracking">No one is tracking you...</string>
     <string name="text_track_user_info">Enter the name and Pin of the person you want to track. A notification will be send to the person you add, saying you will be tracking them.</string>
     <string name="text_name">Name</string>
     <string name="text_pin">Pin</string>
     <string name="text_whos">Who\'s tracking you</string>
     <string name="text_logout">Logout</string>
     <string name="text_no_data">There\'s no data available for this user. Maybe he has not used the app yet!</string>
-
-    <string-array name="aa">
-        <item>buceta</item>
-        <item>cu</item>
-        <item>buceta</item>
-    </string-array>
 </resources>
